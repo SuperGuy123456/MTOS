@@ -3,41 +3,43 @@
 
 ## 📖 About the Project
 
-**MTOS** is essentially a TINY os that runs off of the esp32 flash and it has the capability to run wasm files from the sd card by. passing the flash size limits of the board and also, eliminating the need to reflash to run different programs. It allows the user to download multiple projects onto the sd card and run them at runtime without the need of plugging into a computer.
+**MTOS** is essentially a bootloader for the ESP32 that can download `.bin` files from the web (like those hosted in this repo) and store them on a microSD card. Using a touchscreen interface, it displays the available files, allowing the user to select one to flash.
+
+Each `.bin` file follows a generic structure that includes a function to reflash the core OS — a protected `.bin` file that cannot be removed. This project is actively developed and tested on the **ESP32-2432S028R** (commonly known as the "Cheap Yellow Display"), but it should work on any ESP32 with proper configuration. To view specific features of the specific versions, please go to the `Readme.md` file in each folder and see the summary as well as what to expect.
 
 ## 🚀 Trying It Out
 
-Unless you own an **WaveShare ESP32-S3-Touch-LCD-3.5-C** with the exact same pin configuration required by this project, you'll need to download the project files and modify the pin assignments and possibly the libraries. (Please look at the Porting.md file)
+Unless you own an **ESP32-2432S028R** with the exact same pin configuration required by this project, you'll need to download the `.ino` file and modify the pin assignments and possibly the libraries.
 
-For those using the **WaveShare ESP32-S3-Touch-LCD-3.5-C**, you can simply download the project files, flash them to your ESP32, and download the micro sd card file tree for all of the assets.
+For those using the **ESP32-2432S028R**, you can simply download the `.ino` file, flash it to your ESP32, and place the OS `.bin` file onto the microSD card.
 
 ## 📌 Features
 
-- Downloads `.wasm` files (And additional asset files) from a remote HTTP/HTTPS server  
+- Downloads `.bin` files from a remote HTTP/HTTPS server  
 - Saves the downloaded file to an SD card  
 - Displays available files via touchscreen interface  
-- Reads and Runs the selected wasm from the SD card  
-- Automatically goes back into OS mode after running
+- Reads and flashes the selected binary from the SD card  
+- Automatically reboots into the new firmware  
+- Optional version tracking via `JSON`  
 
 ## 🧰 Requirements
 
-- **WaveShare ESP32-S3-Touch-LCD-3.5-C** ("Cheap Yellow Display")  
-- MicroSD card formatted as `FAT32` (recommended size < 16GB) and MUST contain the required files
-- Wi-Fi access (you must create a wifi_secret.h) file (please refer to Porting.md)
-- `.wasm` files hosted online with similar manifest
+- **ESP32-2432S028R** ("Cheap Yellow Display")  
+- MicroSD card formatted as `FAT32` (recommended size < 16GB)  
+- Wi-Fi access  
+- `.bin` files hosted online  
 
 ## 🔄 Update Flow
 
 1. ESP32 connects to Wi-Fi  
-2. It downloads the `.wasm` file from a specified URL  
-3. The file is saved to the SD card with appropriate folder structure
-4. Updates internal App registery
-5. The ESP32 reads the file from SD and runs it using `Wasm` class 
-6. After running fails or succeeds, exit back into os. 
+2. It downloads the `.bin` file from a specified URL  
+3. The file is saved to the SD card  
+4. The ESP32 reads the file from SD and flashes it using the `Update` class  
+5. If flashing succeeds, the device reboots into the new firmware  
 
-## Porting
+## Prepping the SD card
 
-Please refer to the porting.md file for a slightly incomplete checklist on how to port MTOS to different platforms
+You **need** a folder called ```vpaths``` in the root directory of the sd card. This will ensure that MTOS can download the vpath files into the folder. Without it, after downloading the ```binpath.txt``` file, it will display a error while downloading the vpath files.
 
 ## 🧑‍⚖️ License
 

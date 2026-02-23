@@ -4,6 +4,11 @@
 #include "Wasm.h"
 #include <functional>
 #include "API.h"
+#include "wifi_secret.h"
+#include "SDViewer.h"
+#include "Installer.h"
+#include "Uninstaller.h"
+#include "Run.h"
 
 #include <Wire.h>
 
@@ -13,24 +18,38 @@
 // screen dimensions are 320x480 (panel), your UI uses 320x240 region
 enum State
 {
-  SPLASH,
-  MENU,
-  BOOT,
-  RUN
+  SPLASH, //Start menu
+  MENU, //Shows sys apps
+  BOOT, //the run button triggers this
+  SDVIEW, //The sd view button triggers this
+  INSTALLR, //The install button triggers this
+  UNINSTALLER,
+  SETTING //The gear button triggers this (Does nothing right now...)
 };
 
 SimpleButton StartBtn("start", 190, 215, TFT_WHITE, TFT_RED, 3);
-InvisButton install (17, 0, 64, 64);
-InvisButton runBtn  (91, 0, 64, 64);
-InvisButton sdv     (165, 0, 64, 64);
-InvisButton sett    (239, 0, 64, 64);
+
+InvisButton install     (17,   0, 64, 64);
+InvisButton uninstaller (91,   0, 64, 64);
+InvisButton runBtn      (165,  0, 64, 64);
+InvisButton sdv         (239,  0, 64, 64);
+InvisButton sett        (313,  0, 64, 64);
+
+InvisButton HomeBtn(0,0,48,48);
+
 
 bool update = false;
 State cstate;
+String app_to_run;
 
 TCA9554 tca(0x20);
 
 Wasm wasm;
+
+SDViewerApp sdvapp;
+InstallerApp installerapp;
+UninstallerApp uninstallerapp;
+RunApp runapp;
 
 void reset_lcd_via_tca()
 {
@@ -73,6 +92,15 @@ void printHomeDir() {
   }
 }
 
+bool BeginState()
+{
+    if (!update) return false;
+    update = false;
+    lcd.fillScreen(TFT_BLACK);
+    API::DrawRaw("/os/img/Home.raw", 0, 0, 48, 48);
+    return true;
+}
+
 
 void setup() {
   Serial.begin(115200);
@@ -113,6 +141,24 @@ void setup() {
     }
   }
 
+  API::ConnectToWiFi(WIFI_SSID, WIFI_PASSWORD);
+  if (!SD_MMC.exists("/manifest.txt"))
+  {
+    Serial.println("Manifest not found, downloading...");
+    API::DownloadFile("https://raw.githubusercontent.com/SuperGuy123456/MTOSApps/main/manifest.txt", "/manifest.txt");
+    delay(1000);
+    lcd.fillScreen(TFT_BLACK);
+  }
+  else
+  {
+    if (!API::CheckManifestUpToDate())
+    {
+      Serial.println("Manifest is outdated, downloading...");
+      API::DownloadFile("https://raw.githubusercontent.com/SuperGuy123456/MTOSApps/main/manifest.txt", "/manifest.txt");
+      delay(1000);
+      lcd.fillScreen(TFT_BLACK);
+    }
+  }
   // -----------------------------
   // UI STATE
   // -----------------------------
@@ -129,9 +175,12 @@ void setup() {
   printHomeDir();
 
   wasm.Init();
+
+
 }
 
-void loop() {
+void loop() 
+{
 
   if (cstate == SPLASH)
   {
@@ -144,63 +193,129 @@ void loop() {
 
   else if (cstate == MENU)
   {
-    if (update)
+    if (BeginState())
     {
       Serial.println("Menu mode!");
-      lcd.fillScreen(TFT_BLACK);
+
 
       // NOTE: SD_MMC is mounted at "/sdcard"
       // If your API::DrawRaw assumes root "/", make sure it uses SD_MMC and "/sdcard/..."
+      lcd.fillScreen(TFT_BLACK); //to hide the home button as it is not needed here...
       API::DrawRaw("/os/img/install.raw", 17,  0, 64, 64);
-      API::DrawRaw("/os/img/run.raw",     91,  0, 64, 64);
-      API::DrawRaw("/os/img/sdv.raw",    165,  0, 64, 64);
-      API::DrawRaw("/os/img/sett.raw",   239,  0, 64, 64);
+      API::DrawRaw("/os/img/uninstaller.raw", 91,  0, 64, 64);
+      API::DrawRaw("/os/img/run.raw",     165,  0, 64, 64);
+      API::DrawRaw("/os/img/sdviewer.raw",    239,  0, 64, 64);
+      API::DrawRaw("/os/img/setting.raw",   313,  0, 64, 64);
 
-      update = false;
     }
 
-    if (install.CheckPress() || sdv.CheckPress() || sett.CheckPress())
+    if (install.CheckPress())
     {
-      cstate = RUN;
+      cstate = INSTALLR;
       update = true;
     }
-
+    if (sdv.CheckPress())
+    {
+      cstate = SDVIEW;
+      update = true;
+    }
+    if (sett.CheckPress())
+    {
+      cstate = SETTING;
+      update = true;
+    }
     if (runBtn.CheckPress())
     {
       cstate = BOOT;
+      update = true;
+    }
+    if (uninstaller.CheckPress())
+    {
+      cstate = UNINSTALLER;
       update = true;
     }
   }
 
   else if (cstate == BOOT)
   {
-    if (update)
+    if (BeginState())
     {
-      lcd.fillScreen(TFT_BLACK);
-      // TODO: draw boot animation / app loader
-      update = false;
+      // TODO: show list
+      runapp.InitialDraw();
+    }
+    if (HomeBtn.CheckPress())
+    {
+      cstate = MENU;
+      update = true;
+    }
+    runapp.Update();
+    API::DrawRaw("/os/img/Home.raw", 0, 0, 48, 48);
+
+    //if button clicked, send to RUN
+  }
+
+  else if (cstate == INSTALLR)
+  {
+    if (BeginState())
+    {
+      // TODO: show list from manifest
+      installerapp.InitialDraw();
+    }
+    if (HomeBtn.CheckPress())
+    {
+      cstate = MENU;
+      update = true;
+      return;
+    }
+    installerapp.Update();
+    API::DrawRaw("/os/img/Home.raw", 0, 0, 48, 48);
+  }
+
+  else if (cstate == SETTING)
+  {
+    if (BeginState())
+    {
+      // TODO: show settings
+    }
+    if (HomeBtn.CheckPress())
+    {
+      cstate = MENU;
+      update = true;
     }
   }
 
-  else if (cstate == RUN)
+  else if (cstate == SDVIEW)
   {
-    if (update)
-    {
-      update = false;
-      lcd.fillScreen(TFT_BLACK);
-      // TODO: run selected app
-      /*if(wasm.Run("/test.wasm"))
+      if (BeginState())
       {
-        //go back to the Menu mode again (program quit)
-        cstate = MENU;
-        update = true;
+          sdvapp.InitialDraw();
       }
-      else
+
+      if (HomeBtn.CheckPress())
       {
-        Serial.println("MTOS: WASM execution failed, falling back to MENU mode...");
+          cstate = MENU;
+          update = true;
+          return;   // stop SDViewer from drawing again
       }
-    }*/
+
+      sdvapp.Update();
+      API::DrawRaw("/os/img/Home.raw", 0, 0, 48, 48);
   }
 
-  delay(50);
+  else if (cstate == UNINSTALLER)
+  {
+    if (BeginState())
+    {
+      uninstallerapp.InitialDraw();
+    }
+    if (HomeBtn.CheckPress())
+    {
+      cstate = MENU;
+      update = true;
+    }
+    uninstallerapp.Update();
+    API::DrawRaw("/os/img/Home.raw", 0, 0, 48, 48);
+  }
+
+  delay(30);
 }
